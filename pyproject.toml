@@ -24,7 +24,8 @@ dependencies = [
     "attrs>=23.0.0",
     "python-dotenv>=1.0.0",
     "PyYAML",
-    "click"
+    "click",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 # Development dependencies, installed with `pip install -e .[dev]`
