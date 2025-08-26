@@ -41,7 +41,10 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Install dependencies
-        run: uv pip install -e ".[dev]"
+        run: |
+          # Use uv to sync the virtual environment and install dev dependencies
+          uv venv
+          uv pip install -e ".[dev]"
         shell: bash
 
       - name: Create Release
@@ -49,8 +52,8 @@ jobs:
         # Use the official action for python-semantic-release
         uses: python-semantic-release/python-semantic-release@v10.2.0
         with:
-          # Use the default GITHUB_TOKEN provided by GitHub Actions
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Use the default GH_TOKEN provided by GitHub Actions
+          github_token: ${{ secrets.GH_TOKEN }}
           # Configure the committer name and email for the release commit
           git_committer_name: "github-actions[bot]"
           git_committer_email: "github-actions[bot]@users.noreply.github.com"
@@ -61,6 +64,6 @@ jobs:
         # Use the second official action to publish assets
         uses: python-semantic-release/publish-action@v10.2.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GH_TOKEN }}
           # Use the tag output from the release step to target the correct release
           tag: ${{ steps.release.outputs.tag }}

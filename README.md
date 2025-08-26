@@ -8,13 +8,11 @@ This project provides a unified, Pythonic interface to manage chats, folders, an
 
 [//]: # ([![Python Versions]&#40;https://img.shields.io/pypi/pyversions/openwebui-sdk.svg?style=for-the-badge&#41;]&#40;https://pypi.org/project/openwebui-sdk/&#41;)
 
-[//]: # ([![License]&#40;https://img.shields.io/pypi/l/openwebui-sdk.svg?style=for-the-badge&#41;]&#40;https://github.com/HermanHaggerty/OpenWebUI-LLM-CLI/blob/main/LICENSE&#41;)
+[![CI Tests](https://img.shields.io/github/actions/workflow/status/dubh3124/OpenWebUI-SDK/test.yml?branch=main&label=tests&style=for-the-badge)](https://github.com/dubh3124/OpenWebUI-SDK/actions/workflows/test.yaml)
 
-[//]: # ([![CI Tests]&#40;https://img.shields.io/github/actions/workflow/status/HermanHaggerty/OpenWebUI-LLM-CLI/test.yml?branch=main&label=tests&style=for-the-badge&#41;]&#40;https://github.com/HermanHaggerty/OpenWebUI-LLM-CLI/actions/workflows/test.yml&#41;)
+[![Code Coverage](https://img.shields.io/codecov/c/github/dubh3124/OpenWebUI-SDK?style=for-the-badge)](https://codecov.io/gh/dubh3124/OpenWebUI-SDK)
 
-[//]: # ([![Code Coverage]&#40;https://img.shields.io/codecov/c/github/HermanHaggerty/OpenWebUI-LLM-CLI?style=for-the-badge&#41;]&#40;https://codecov.io/gh/HermanHaggerty/OpenWebUI-LLM-CLI&#41;)
-
-[//]: # ([![Code style: ruff]&#40;https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json&style=for-the-badge&#41;]&#40;https://github.com/astral-sh/ruff&#41;)
+[![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json&style=for-the-badge)](https://github.com/astral-sh/ruff)
 
 ---
 
@@ -37,8 +35,8 @@ It is recommended to install `openwebui-sdk` in a virtual environment.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/HermanHaggerty/OpenWebUI-LLM-CLI.git # Replace with your actual repo URL
-    cd OpenWebUI-LLM-CLI
+    git clone https://github.com/dubh3124/OpenWebUI-SDK.git # Replace with your actual repo URL
+    cd OpenWebUI-SDK
     ```
 
 2.  **Create and activate a virtual environment:**

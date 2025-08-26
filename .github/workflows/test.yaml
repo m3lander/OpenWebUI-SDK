@@ -40,6 +40,6 @@ jobs:
         shell: bash
 
       - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@vv5.5.0
+        uses: codecov/codecov-action@v5.5.0
         with:
           file: ./coverage.xml
