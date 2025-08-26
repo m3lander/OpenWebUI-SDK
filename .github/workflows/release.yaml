@@ -1,0 +1,66 @@
+name: Continuous Delivery
+
+on:
+  push:
+    branches:
+      - main
+
+# Set default permissions for all jobs. This is a good security practice.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    # Set permissions for this specific job. 'contents: write' is required for the action
+    # to push commits/tags and create a GitHub Release.
+    permissions:
+      contents: write
+
+    # Prevent race conditions from multiple pushes to main in a short time.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # This is essential. The action needs the full commit history
+          # to determine the version bump and generate the changelog.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]"
+        shell: bash
+
+      - name: Create Release
+        id: release
+        # Use the official action for python-semantic-release
+        uses: python-semantic-release/python-semantic-release@v10.2.0
+        with:
+          # Use the default GITHUB_TOKEN provided by GitHub Actions
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Configure the committer name and email for the release commit
+          git_committer_name: "github-actions[bot]"
+          git_committer_email: "github-actions[bot]@users.noreply.github.com"
+
+      - name: Publish to GitHub Release
+        # This step runs only if the previous step created a new release
+        if: steps.release.outputs.released == 'true'
+        # Use the second official action to publish assets
+        uses: python-semantic-release/publish-action@v10.2.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Use the tag output from the release step to target the correct release
+          tag: ${{ steps.release.outputs.tag }}

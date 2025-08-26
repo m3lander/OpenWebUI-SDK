@@ -1,0 +1,89 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+# PEP 621 Project Metadata
+[project]
+name = "openwebui-sdk"
+version = "0.1.0"
+description = "A Python SDK and CLI for interacting with the Open WebUI API."
+authors = [{ name = "Herman Haggerty", email = "herman.haggerty@hemrantech.com" }]
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+# Core runtime dependencies for the SDK
+dependencies = [
+    "httpx",
+    "attrs>=23.0.0",
+    "python-dotenv>=1.0.0",
+    "PyYAML",
+    "click"
+]
+
+# Development dependencies, installed with `pip install -e .[dev]`
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "python-semantic-release>=10.2.0",
+    "openapi-python-client>=0.18.0", # For generating the client
+    "unasync", # For creating the sync version of the SDK
+]
+
+# Defines the command-line script entry point
+[project.scripts]
+owui = "openwebui.cli.main:cli"
+
+
+# --- Tool Configuration ---
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+# Automatically discover and run async tests
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+# Measure coverage on the core SDK, not the tests or generated code
+source = ["openwebui"]
+omit = [
+    "*/cli/*", 
+    "*/tests/*", 
+    "*/open_web_ui_client/*"
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+# Add any ruff linter configurations here
+line-length = 110
+
+[tool.semantic_release]
+# Version will be read from pyproject.toml [project] section
+version_source = "toml"
+version_toml = ["pyproject.toml:project.version"]
+# Enable changelog generation
+changelog_file = "CHANGELOG.md"
+# Enable GitHub Release
+upload_to_release = true
+# Build the package as part of the release
+build_command = "pip install build && python -m build"
+
+[tool.semantic_release.branches.main]
+match = "^(main)$"
+prerelease = false
+prerelease_token = "rc"

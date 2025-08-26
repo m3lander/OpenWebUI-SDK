@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.env                                    # Your local .env file
+.venv/                                  # Your virtual environment
+venv/
+env/
+env.bak/
+pip-log.txt
+*.egg
+*.tgz
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# Logs
+log/
+logs/
+*.log
+
+# Tooling
+.idea/                          # PyCharm
+.vscode/                        # VS Code settings
+*.swp                           # Vim swap files
+
+# Terraform (if you had any in root for testing)
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# Operating System Files
+.DS_Store             # macOS
+Thumbs.db             # Windows
+Desktop.ini           # Windows
+
+#custom
+.kbignore
+.idea

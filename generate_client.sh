@@ -1,0 +1,1 @@
+openapi-python-client generate --url http://<url>/openapi.json --output-path openwebui/open_web_ui_client --overwrite --meta uv
