@@ -3,7 +3,8 @@ from typing import Optional
 from .config import get_config, Config
 from .exceptions import OpenWebUIError
 from .api.folders import FoldersAPI
-from .api.chats import ChatsAPI  # <-- Import the new module
+from .api.chats import ChatsAPI
+from .api.knowledge import KnowledgeBaseAPI
 
 # Import the necessary low-level client from the generated code
 from .open_web_ui_client.open_web_ui_client import AuthenticatedClient
@@ -19,6 +20,7 @@ class OpenWebUI:
 
     folders: FoldersAPI
     chats: ChatsAPI
+    knowledge: KnowledgeBaseAPI
     _client: AuthenticatedClient
 
     def __init__(
@@ -56,6 +58,7 @@ class OpenWebUI:
 
         self.folders = FoldersAPI(self._client)
         self.chats = ChatsAPI(self._client)
+        self.knowledge = KnowledgeBaseAPI(self._client)
 
     async def __aenter__(self):
         log.debug("Entering async context.")

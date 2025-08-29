@@ -12,7 +12,6 @@ pytestmark = pytest.mark.asyncio
 pytest_plugins = ["pytest_asyncio"]
 
 
-@pytest.mark.skip(reason="Broken")
 @pytest.fixture(scope="session")
 async def sdk_live_client(server_url):  # Removed asyncio_loop as a direct dependency here
     """
@@ -41,7 +40,6 @@ async def sdk_live_client(server_url):  # Removed asyncio_loop as a direct depen
         await client.__aexit__(None, None, None)
 
 
-@pytest.mark.skip(reason="Broken")
 @pytest.fixture(scope="function")
 async def test_folder_id(sdk_live_client):
     """
@@ -78,7 +76,7 @@ async def test_folder_id(sdk_live_client):
 
 
 # --- Integration Test Scenarios ---
-@pytest.mark.skip(reason="Broken")
+@pytest.mark.skip(reason="Needs a live server with LLMs configured")
 async def test_full_chat_workflow_with_folder(sdk_live_client, test_folder_id):
     """
     Tests creating a chat, continuing it, listing messages, renaming,

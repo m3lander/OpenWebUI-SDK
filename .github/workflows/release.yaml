@@ -57,6 +57,7 @@ jobs:
           # Configure the committer name and email for the release commit
           git_committer_name: "github-actions[bot]"
           git_committer_email: "github-actions[bot]@users.noreply.github.com"
+          force: minor
 
       - name: Publish to GitHub Release
         # This step runs only if the previous step created a new release
