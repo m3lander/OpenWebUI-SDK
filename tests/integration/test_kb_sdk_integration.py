@@ -13,6 +13,7 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.xfail(reason="Known asyncio loop closed error during httpx client teardown", strict=False)
+@pytest.mark.skip(reason="Needs a live server with LLMs configured")
 async def test_full_knowledge_base_workflow(sdk_live_client, test_kb_id, tmp_path):
     """
     Tests the full lifecycle of knowledge base management:

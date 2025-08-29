@@ -76,7 +76,7 @@ async def test_folder_id(sdk_live_client):
 
 
 # --- Integration Test Scenarios ---
-# @pytest.mark.skip(reason="Broken")
+@pytest.mark.skip(reason="Needs a live server with LLMs configured")
 async def test_full_chat_workflow_with_folder(sdk_live_client, test_folder_id):
     """
     Tests creating a chat, continuing it, listing messages, renaming,
