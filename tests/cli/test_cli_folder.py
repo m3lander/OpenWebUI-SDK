@@ -7,6 +7,7 @@ from openwebui.cli.main import cli  # Ensure this path is correct
 
 # --- Test Cases for Folder Commands ---
 
+
 @pytest.mark.skip(reason="Broken")
 def test_folder_create_cli_success(runner, mock_sdk_client):
     """Test `owui folder create` command for successful folder creation."""

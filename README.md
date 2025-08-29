@@ -2,7 +2,7 @@
 
 A modern, asynchronous Python SDK and Command-Line Interface (`owui`) for interacting with your Open WebUI instance.
 
-This project provides a unified, Pythonic interface to manage chats, folders, and interact with Large Language Models (LLMs) served by Open WebUI, following a structured, layered design. It is built to be both programmatically flexible for developers and easy to use from the terminal for end-users.
+This project provides a unified, Pythonic interface to manage chats, folders, knowledgebases and interact with Large Language Models (LLMs) served by Open WebUI, following a structured, layered design. It is built to be both programmatically flexible for developers and easy to use from the terminal for end-users.
 
 [//]: # ([![PyPI Version]&#40;https://img.shields.io/pypi/v/openwebui-sdk.svg?style=for-the-badge&#41;]&#40;https://pypi.org/project/openwebui-sdk/&#41;)
 
@@ -19,8 +19,8 @@ This project provides a unified, Pythonic interface to manage chats, folders, an
 ## 🚀 Features
 
 *   **Asynchronous First SDK:** A clean, `asyncio`-native Python library (`openwebui`) for high-performance, concurrent interaction.
-*   **Intuitive CLI:** A powerful command-line tool (`owui`) built with `click` for easy management of chats and folders directly from your terminal.
-*   **Complex Workflow Abstraction:** Simplifies multi-step API interactions (e.g., creating a new chat with an initial LLM response) into single, intuitive SDK methods.
+*   **Intuitive CLI:** A powerful command-line tool (`owui`) built with `click` for easy management of chats, folders, and Knowledge Bases directly from your terminal.
+*   **Complex Workflow Abstraction:** Simplifies multi-step API interactions (e.g., creating a new chat with an initial LLM response, uploading a directory to a KB with `.kbignore` rules) into single, intuitive SDK methods.
 *   **Hierarchical YAML Configuration:** Loads configuration from `~/.owui/config.yaml` or a local `.owui/config.yaml`, with environment variables for overrides.
 *   **Robust Error Handling:** Provides custom exceptions like `AuthenticationError` and `NotFoundError` for predictable error handling in your applications.
 *   **Integrated Logging:** Detailed logging controllable via CLI flags (`--verbose`, `--debug`) for easy debugging and visibility.
@@ -91,7 +91,7 @@ server:
 
 ### Command-Line Interface (`owui`)
 
-The CLI provides commands for managing folders and chats. You can explore all options using `--help`.
+The CLI provides commands for managing folders, chats, and knowledge bases. You can explore all options using `--help`.
 
 ```bash
 owui --help
@@ -152,60 +152,51 @@ You can control verbosity with logging flags and output format with the `--outpu
     owui chat delete "your-chat-id-here"
     ```
 
-### Python SDK Usage
+#### Knowledge Base Management Examples
 
-You can also use the `openwebui` Python package directly in your scripts and applications for programmatic control.
+*   **Create a new Knowledge Base:**
+    ```bash
+    owui kb create "My Project Docs" --description "Documentation for my new project."
+    ```
 
-```python
-import asyncio
-from openwebui import OpenWebUI, AuthenticationError, NotFoundError
+*   **List all Knowledge Bases:**
+    ```bash
+    owui kb list-kbs
+    ```
 
-async def main():
-    try:
-        # Client takes config from YAML/env by default, or you can pass directly:
-        # client = OpenWebUI(base_url="http://localhost:8080", api_key="sk-YOUR_KEY")
-        async with OpenWebUI() as client:
-            # --- Folders API ---
-            print("\n--- Listing Folders ---")
-            folders = await client.folders.list()
-            if folders:
-                for folder in folders:
-                    print(f"Folder: {folder.name} (ID: {folder.id})")
-            else:
-                print("No folders found.")
-            
-            # --- Chats API ---
-            print("\n--- Creating a new chat ---")
-            new_chat = await client.chats.create(model="gemini-1.5-flash", prompt="Tell me a fun fact about Python.")
-            chat_id = new_chat.id
-            print(f"Created chat: '{new_chat.title}' (ID: {chat_id})")
-            print(f"Assistant's first response: {new_chat.chat.additional_properties['messages'][-1]['content']}")
+*   **Upload a single file to a KB:**
+    ```bash
+    owui kb upload-file ./my_document.txt --kb-id "your-knowledge-base-id-here"
+    ```
 
-            print("\n--- Continuing the chat ---")
-            await client.chats.continue_chat(chat_id, "And why is it useful for web development?")
+*   **Upload a local directory to a KB:**
+    ```bash
+    # This command will upload all files from 'my_local_files/' to the specified KB.
+    # It respects .kbignore files (e.g., my_local_files/.kbignore) for exclusions.
+    owui kb upload-dir ./my_local_files/ --kb-id "your-knowledge-base-id-here"
+    ```
 
-            print("\n--- Listing messages in the chat ---")
-            chat_details = await client.chats.get(chat_id)
-            for msg in chat_details.chat.additional_properties['messages']:
-                print(f"[{msg['role'].capitalize()}]: {msg['content']}")
+*   **List files within a Knowledge Base:**
+    ```bash
+    owui kb list-files "your-knowledge-base-id-here" --search "report"
+    ```
 
-            print("\n--- Deleting the new chat ---")
-            if await client.chats.delete(chat_id):
-                print(f"Chat {chat_id} deleted successfully.")
+*   **Update content of an existing file in a KB:**
+    ```bash
+    owui kb update-file "your-file-id-here" ./updated_document.txt
+    ```
 
-    except AuthenticationError:
-        print("Authentication failed. Please check your configuration.")
-    except NotFoundError as e:
-        print(f"Resource not found: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+*   **Delete a specific file from a KB:**
+    ```bash
+    owui kb delete-file "your-file-id-here"
+    ```
 
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
----
-
+*   **Delete all files from a Knowledge Base:**
+    *(Requires confirmation, use `--yes` to skip)*
+    ```bash
+    owui kb delete-all-files "your-knowledge-base-id-here"
+    ```
+    
 ## 🛠️ Development
 
 For those looking to contribute to the project:
@@ -224,6 +215,9 @@ For those looking to contribute to the project:
 
     # Run only integration tests (requires live server and configuration)
     uv run pytest tests/integration/
+
+    # Run specific integration tests for Knowledge Base functionality
+    uv run pytest tests/integration/test_kb_sdk_integration.py
     ```
 3.  **Code Style:** This project uses `ruff` for linting and formatting.
     ```bash
