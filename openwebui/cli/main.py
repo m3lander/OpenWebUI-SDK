@@ -23,7 +23,6 @@ if not log.handlers:
     handler.setFormatter(formatter)
     log.addHandler(handler)
 
-logging.basicConfig(level=logging.DEBUG)
 
 # --- Output Formatting Helper ---
 def format_output(data: Any, output_format: str):
