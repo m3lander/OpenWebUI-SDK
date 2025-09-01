@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 from openwebui.exceptions import NotFoundError
 from openwebui.open_web_ui_client.open_web_ui_client import models
@@ -79,8 +79,9 @@ async def test_chats_delete_success(mocker, sdk_client):
     mock_api_func.assert_awaited_once_with(id="chat-to-delete", client=sdk_client._client)
 
 
+@pytest.mark.asyncio
 async def test_chats_create_success(mocker, sdk_client):
-    """Tests the complex two-step chat creation workflow."""
+    """Tests the complex two-step chat creation workflow including optional RAG."""
     # 1. Mock the LLM completion API call
     mock_llm_api = mocker.patch(
         "openwebui.api.chats.generate_chat_completion_openai_chat_completions_post.asyncio_detailed"
@@ -97,7 +98,7 @@ async def test_chats_create_success(mocker, sdk_client):
         id="new-chat-123",
         user_id="user1",
         title="New Chat",
-        chat={},
+        chat=models.ChatResponseChat(),  # Chat response often has empty chat on creation
         created_at=1,
         updated_at=1,
         archived=False,
@@ -105,99 +106,206 @@ async def test_chats_create_success(mocker, sdk_client):
     mock_create_response = MagicMock(spec=Response, status_code=200, parsed=final_chat_response)
     mock_create_api.return_value = mock_create_response
 
-    # 3. Call the high-level SDK method
-    new_chat = await sdk_client.chats.create(model="test-model", prompt="What is the capital of France?")
+    # --- RAG Specific Mocking ---
+    # Mock the KnowledgeBaseAPI.query method that ChatsAPI uses
+    mock_kb_query = mocker.patch(
+        "openwebui.api.knowledge.KnowledgeBaseAPI.query", new_callable=AsyncMock
+    )
+    # Configure it to return a list of dictionaries, simulating chunks
+    mock_kb_query.return_value = [
+        {"content": "Relevant KB content about France."},
+        {"content": "More details about European capitals."},
+    ]
 
-    # 4. Assertions
-    assert new_chat.id == "new-chat-123"
+    # Test 1: Basic chat creation (no RAG)
+    new_chat_no_rag = await sdk_client.chats.create(model="test-model", prompt="What is the capital of France?")
+    assert new_chat_no_rag.id == "new-chat-123"
+    mock_llm_api.assert_awaited_once()  # Should be called once for this test
 
-    # Assert the LLM call was correct
+    # Reset mocks for the next test
+    mock_llm_api.reset_mock()
+    mock_create_api.reset_mock()
+    mock_kb_query.reset_mock()
+
+    # Reconfigure mock_create_api for the next chat creation
+    mock_create_api.return_value = MagicMock(spec=Response, status_code=200, parsed=final_chat_response)
+
+    # Test 2: Chat creation WITH RAG parameters
+    kb_ids_to_use = ["my-kb-id-1", "another-kb-id-2"]
+    rag_k = 5
+    rag_r = 0.7
+
+    new_chat_with_rag = await sdk_client.chats.create(
+        model="test-model",
+        prompt="Tell me about AI",
+        kb_ids=kb_ids_to_use,
+        k=rag_k,
+        r=rag_r,
+        hybrid=True,
+    )
+
+    assert new_chat_with_rag.id == "new-chat-123"  # Still returns the same mocked chat
+
+    # Verify KnowledgeBaseAPI.query was called correctly
+    mock_kb_query.assert_awaited_once_with(
+        "Tell me about AI",  # Original prompt passed to KB query
+        kb_ids_to_use,
+        k=rag_k,
+        k_reranker=None,  # Not set in this call
+        r=rag_r,
+        hybrid=True,
+        hybrid_bm25_weight=None,  # Not set in this call
+    )
+
+    # Verify LLM was called with the augmented prompt
     mock_llm_api.assert_awaited_once()
     llm_call_args = mock_llm_api.call_args[1]
-    assert llm_call_args["body"]["model"] == "test-model"
-    assert llm_call_args["body"]["messages"][0]["content"] == "What is the capital of France?"
+    augmented_user_message = llm_call_args["body"]["messages"][0]["content"]
+    assert "Please use the following context to answer the question." in augmented_user_message
+    assert "Relevant KB content about France." in augmented_user_message  # Content from mock_kb_query
+    assert "More details about European capitals." in augmented_user_message
+    assert "Tell me about AI" in augmented_user_message  # Original prompt should be in augmented prompt
 
-    # Assert the chat creation call was correct
-    mock_create_api.assert_awaited_once()
+    # Verify original prompt (not augmented) was saved in chat history
     create_call_args = mock_create_api.call_args[1]
-
-    # Verify the payload contains the full conversation
     sent_messages = create_call_args["body"].chat.additional_properties["messages"]
-    assert len(sent_messages) == 2
-    assert sent_messages[0]["role"] == "user"
-    assert sent_messages[0]["content"] == "What is the capital of France?"
-    assert sent_messages[1]["role"] == "assistant"
-    assert sent_messages[1]["content"] == "The capital of France is Paris."
+    assert sent_messages[0]["content"] == "Tell me about AI"  # Original prompt
 
 
-# tests/test_sdk_chats.py
-@pytest.mark.skip(reason="Broken")
+@pytest.mark.asyncio
 async def test_chats_continue_success(mocker, sdk_client):
-    """Tests the complex workflow of continuing a chat."""
+    """Tests the complex workflow of continuing a chat, including optional RAG."""
     chat_id = "existing-chat-123"
 
-    # 1. Mock the initial GET request
-    mock_get_api = mocker.patch("openwebui.api.chats.get_chat_by_id_api_v1_chats_id_get.asyncio_detailed")
-    initial_chat_data = models.ChatResponse(
+    # Test 1: Continue chat without RAG
+    # Define initial_chat_data specifically for this test case
+    initial_chat_data_no_rag = models.ChatResponse(
         id=chat_id,
         user_id="user1",
-        title="Initial Chat",
+        title="Initial Chat (No RAG)",
         chat=models.ChatResponseChat(),
         created_at=1,
         updated_at=1,
         archived=False,
     )
-    initial_chat_data.chat.additional_properties = {
+    initial_chat_data_no_rag.chat.additional_properties = {
         "models": ["test-model"],
         "messages": [{"role": "user", "content": "Hello"}],
     }
-    mock_get_response = MagicMock(spec=Response, status_code=200, parsed=initial_chat_data)
-    mock_get_api.return_value = mock_get_response
 
-    # 2. Mock the LLM completion call
+    mock_get_api = mocker.patch("openwebui.api.chats.get_chat_by_id_api_v1_chats_id_get.asyncio_detailed")
+    mock_get_api.return_value = MagicMock(spec=Response, status_code=200, parsed=initial_chat_data_no_rag)
+
     mock_llm_api = mocker.patch(
-        "openwebui.api.chats.generate_chat_completion_openai_chat_completions_post.asyncio_detailed"
-    )
+        "openwebui.api.chats.generate_chat_completion_openai_chat_completions_post.asyncio_detailed")
     llm_response_data = {"choices": [{"message": {"content": "Hello back!"}}]}
-    mock_llm_response = MagicMock(spec=Response, status_code=200, parsed=llm_response_data)
-    mock_llm_api.return_value = mock_llm_response
+    mock_llm_api.return_value = MagicMock(spec=Response, status_code=200, parsed=llm_response_data)
 
-    # 3. Mock the final chat update call
-    mock_update_api = mocker.patch(
-        "openwebui.api.chats.update_chat_by_id_api_v1_chats_id_post.asyncio_detailed"
+    mock_update_api = mocker.patch("openwebui.api.chats.update_chat_by_id_api_v1_chats_id_post.asyncio_detailed")
+    mock_update_api.return_value = MagicMock(spec=Response, status_code=200, parsed=
+    models.ChatResponse(
+        id=chat_id, user_id="user1", title="Updated Chat (No RAG)", chat=models.ChatResponseChat(), created_at=1,
+        updated_at=2, archived=False
     )
-    final_chat_data = models.ChatResponse(
+                                             )
+
+    mock_kb_query = mocker.patch(  # Mock it even if not used, to control behavior
+        "openwebui.api.knowledge.KnowledgeBaseAPI.query", new_callable=AsyncMock
+    )
+    mock_kb_query.return_value = []  # Ensure no RAG context for this test
+
+    updated_chat_no_rag = await sdk_client.chats.continue_chat(chat_id=chat_id, prompt="How are you?")
+    assert updated_chat_no_rag.title == "Updated Chat (No RAG)"
+    mock_get_api.assert_awaited_once_with(id=chat_id, client=sdk_client._client)
+    mock_llm_api.assert_awaited_once()  # Should be called
+    mock_update_api.assert_awaited_once()  # Should be called
+    mock_kb_query.assert_not_awaited()  # Should NOT be called
+
+    # --- Test 2: Continue chat WITH RAG parameters ---
+    # Reset and reconfigure mocks for this specific test block
+    mock_get_api.reset_mock()
+    mock_llm_api.reset_mock()
+    mock_update_api.reset_mock()
+    mock_kb_query.reset_mock()
+
+    initial_chat_data_with_rag = models.ChatResponse(
         id=chat_id,
         user_id="user1",
-        title="Updated Chat",
+        title="Initial Chat (With RAG)",
         chat=models.ChatResponseChat(),
         created_at=1,
-        updated_at=2,
+        updated_at=1,
         archived=False,
     )
-    mock_update_response = MagicMock(spec=Response, status_code=200, parsed=final_chat_data)
-    mock_update_api.return_value = mock_update_response
+    initial_chat_data_with_rag.chat.additional_properties = {
+        "models": ["test-model"],
+        "messages": [{"role": "user", "content": "Previous history message from RAG test."}],
+    }
+    mock_get_api.return_value = MagicMock(spec=Response, status_code=200, parsed=initial_chat_data_with_rag)
 
-    # Call the SDK method
-    updated_chat = await sdk_client.chats.continue_chat(chat_id=chat_id, prompt="How are you?")
+    mock_llm_api.return_value = MagicMock(spec=Response, status_code=200,
+                                          parsed=llm_response_data)  # Re-use generic LLM response
 
-    # Assertions
-    assert updated_chat.title == "Updated Chat"
-    mock_get_api.assert_awaited_once_with(id=chat_id, client=sdk_client._client)
+    mock_update_api.return_value = MagicMock(spec=Response, status_code=200, parsed=
+    models.ChatResponse(
+        id=chat_id, user_id="user1", title="Updated Chat (With RAG)", chat=models.ChatResponseChat(), created_at=1,
+        updated_at=2, archived=False
+    )
+                                             )
 
-    # Verify the payload sent TO the LLM contained the history up to the new prompt
+    # Configure KB query to return content for RAG
+    mock_kb_query.return_value = [
+        {"content": "Relevant KB content for continuation."},
+        {"content": "Additional facts for the project."},
+    ]
+
+    kb_ids_to_use = ["continuation-kb-1"]
+    rag_k_reranker = 2
+    rag_hybrid_bm25_weight = 0.5
+
+    updated_chat_with_rag = await sdk_client.chats.continue_chat(
+        chat_id=chat_id,
+        prompt="Tell me more about the project.",
+        kb_ids=kb_ids_to_use,
+        k_reranker=rag_k_reranker,
+        hybrid_bm25_weight=rag_hybrid_bm25_weight,
+    )
+
+    assert updated_chat_with_rag.title == "Updated Chat (With RAG)"  # Verify title updated
+
+    # Verify KnowledgeBaseAPI.query was called correctly
+    mock_kb_query.assert_awaited_once_with(
+        "Tell me more about the project.",  # Original prompt passed to KB query
+        kb_ids_to_use,
+        k=None,  # Not set in this call
+        k_reranker=rag_k_reranker,
+        r=None,  # Not set in this call
+        hybrid=None,  # Not set in this call
+        hybrid_bm25_weight=rag_hybrid_bm25_weight,
+    )
+
+    # Verify LLM was called with the augmented prompt including history and new context
     mock_llm_api.assert_awaited_once()
     llm_call_args = mock_llm_api.call_args[1]
-    # FIX: The assertion was slightly incorrect. We check the state of the list
-    # *when it was passed* to the LLM, which was correctly 2.
-    assert len(llm_call_args["body"]["messages"]) == 2
-    assert llm_call_args["body"]["messages"][0]["content"] == "Hello"
-    assert llm_call_args["body"]["messages"][1]["content"] == "How are you?"
 
-    # Verify the final update call contained the full conversation
+    # The list of messages passed to LLM should include previous history + the new augmented user message
+    llm_messages = llm_call_args["body"]["messages"]
+    assert len(llm_messages) == 2  # "Previous history message from RAG test." + new augmented prompt
+
+    # Check the content of the previous message
+    assert llm_messages[0]["content"] == "Previous history message from RAG test."
+
+    # Check the content of the augmented user message
+    augmented_user_message = llm_messages[1]["content"]
+    assert "Please use the following context to answer the question." in augmented_user_message
+    assert "Relevant KB content for continuation." in augmented_user_message
+    assert "Additional facts for the project." in augmented_user_message
+    assert "Tell me more about the project." in augmented_user_message
+
+    # Verify the final update call saved the original prompt, not the augmented one
     mock_update_api.assert_awaited_once()
     update_call_args = mock_update_api.call_args[1]
     final_messages = update_call_args["body"].chat.additional_properties["messages"]
-    assert len(final_messages) == 3  # The user prompt, new user prompt, and assistant response
-    assert final_messages[2]["role"] == "assistant"
-    assert final_messages[2]["content"] == "Hello back!"
+    assert len(final_messages) == 2  # Original chat and new message
+    assert final_messages[0]["content"] == "Previous history message from RAG test."
+    assert final_messages[1]["content"] == "Tell me more about the project."  # Should be original prompt

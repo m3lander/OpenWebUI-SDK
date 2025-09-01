@@ -15,7 +15,7 @@ from ..utils.api_utils import handle_api_response  # NEW IMPORT for centralized 
 
 # --- DIRECT IMPORTS from the generated OpenWebUI API client ---
 from ..open_web_ui_client.open_web_ui_client import AuthenticatedClient, models
-from ..open_web_ui_client.open_web_ui_client.types import File as OpenAPIGeneratedFile
+from ..open_web_ui_client.open_web_ui_client.types import File as OpenAPIGeneratedFile, UNSET
 
 # API function imports (extrapolated from kbmanager.api_interface and likely OpenWebUI structure)
 from ..open_web_ui_client.open_web_ui_client.api.knowledge.create_new_knowledge_api_v1_knowledge_create_post import (
@@ -38,6 +38,9 @@ from ..open_web_ui_client.open_web_ui_client.api.knowledge.get_knowledge_by_id_a
 )
 from ..open_web_ui_client.open_web_ui_client.api.knowledge.delete_knowledge_by_id_api_v1_knowledge_id_delete_delete import (
     asyncio_detailed as delete_kb_api_call,
+)
+from ..open_web_ui_client.open_web_ui_client.api.retrieval.query_collection_handler_api_v1_retrieval_query_collection_post import (
+     asyncio_detailed as query_kb_api_call,
 )
 
 
@@ -106,6 +109,95 @@ class KnowledgeBaseAPI:
             return handle_api_response(response, f"knowledge base deletion for ID {kb_id}")
         except httpx.ConnectError as e:
             raise ConnectionError(f"A network error occurred while deleting knowledge base: {e}") from e
+
+    async def query(
+            self,
+            query_text: str,
+            kb_ids: List[str],
+            k: Optional[int] = None,
+            k_reranker: Optional[int] = None,
+            r: Optional[float] = None,
+            hybrid: Optional[bool] = None,
+            hybrid_bm25_weight: Optional[float] = None,
+    ) -> List[Dict[str, Any]]:  # This return type is still correct conceptually for the final output
+        """
+        Queries one or more knowledge bases and returns the most relevant text chunks.
+
+        Args:
+            query_text: The user's query to search for.
+            kb_ids: A list of knowledge base IDs to query.
+            k: The number of results to return (top-k).
+            k_reranker: The number of results to re-rank (if reranking is used).
+            r: The relevance score threshold (0.0 to 1.0).
+            hybrid: Whether to use hybrid search (vector + keyword).
+            hybrid_bm25_weight: The weight for BM25 in hybrid search (0.0 to 1.0).
+
+        Returns:
+            A list of dictionary objects, each representing a retrieved document chunk.
+            Each dictionary will typically contain 'content' and 'meta' fields.
+        """
+        log.info(f"Querying KBs: {kb_ids} with text: '{query_text[:50]}...'")
+        try:
+            # Construct QueryCollectionsForm dynamically based on provided parameters
+            query_form_data = {
+                "collection_names": kb_ids,
+                "query": query_text,
+            }
+            if k is not None:
+                query_form_data["k"] = k
+            if k_reranker is not None:
+                query_form_data["k_reranker"] = k_reranker
+            if r is not None:
+                query_form_data["r"] = r
+            if hybrid is not None:
+                query_form_data["hybrid"] = hybrid
+            if hybrid_bm25_weight is not None:
+                query_form_data["hybrid_bm25_weight"] = hybrid_bm25_weight
+
+            query_form = models.QueryCollectionsForm(
+                collection_names=query_form_data["collection_names"],
+                query=query_form_data["query"],
+                k=query_form_data.get("k", UNSET),
+                k_reranker=query_form_data.get("k_reranker", UNSET),
+                r=query_form_data.get("r", UNSET),
+                hybrid=query_form_data.get("hybrid", UNSET),
+                hybrid_bm25_weight=query_form_data.get("hybrid_bm25_weight", UNSET),
+            )
+
+            response = await query_kb_api_call(client=self._client, body=query_form)
+            retrieved_response_dict = handle_api_response(response, f"query on KBs {kb_ids}")
+
+            # --- FIX STARTS HERE ---
+            if not isinstance(retrieved_response_dict, dict):
+                log.error(
+                    f"Expected dict from retrieval API, but received: {type(retrieved_response_dict)}. Raw: {retrieved_response_dict}")
+                raise APIError(f"Unexpected retrieval API response type: {type(retrieved_response_dict)}",
+                               response.status_code)
+
+            # The actual chunks are in the 'documents' field, and 'metadatas' often stores the corresponding meta
+            # Assuming 'documents' is a list of lists, and we want to flatten it and pair with metadata.
+            # The structure from your error message: {'distances': [...], 'documents': [[...]], 'metadatas': [[...]]}
+
+            extracted_documents_lists = retrieved_response_dict.get('documents', [])
+            extracted_metadatas_lists = retrieved_response_dict.get('metadatas', [])
+
+            # Flatten the lists and pair documents with their metadata
+            # Assuming a 1:1 mapping between documents in inner list and their metadatas
+            retrieved_chunks = []
+            for doc_list, meta_list in zip(extracted_documents_lists, extracted_metadatas_lists):
+                for doc_content, meta_data in zip(doc_list, meta_list):
+                    retrieved_chunks.append({
+                        "content": doc_content,
+                        "meta": meta_data  # This could be any relevant metadata
+                    })
+            # --- FIX ENDS HERE ---
+
+            log.info(f"Retrieved {len(retrieved_chunks)} chunks from KBs: {kb_ids}.")
+            log.debug(f"Retrieved chunks: {retrieved_chunks}")
+            return retrieved_chunks  # Now returning a List[Dict] as expected by ChatsAPI
+
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"A network error occurred while querying KBs '{kb_ids}': {e}") from e
 
     async def list_all(self) -> List[models.KnowledgeResponse]:
         """
