@@ -56,7 +56,7 @@ class ChatsAPI:
 
         # --- RAG WORKFLOW ADDITION ---
         if kb_ids:
-            print(kb_ids)
+            log.debug(f"kb_ids provided for RAG workflow: {kb_ids}")
             log.info(f"RAG workflow activated. Querying KBs {kb_ids} for context.")
             try:
                 retrieved_chunks = await self.knowledge.query(
