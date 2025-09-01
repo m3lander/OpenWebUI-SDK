@@ -3,7 +3,7 @@ import asyncio
 import logging
 import json
 from pathlib import Path  # Added for path operations in upload_dir & update_file
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 import click
 import httpx
@@ -22,7 +22,6 @@ if not log.handlers:
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     log.addHandler(handler)
-
 
 
 # --- Output Formatting Helper ---
@@ -97,22 +96,81 @@ def chat():
     """Commands for managing chats."""
     pass
 
-
+# create_chat_command_wrapper function (add new options for RAG settings)
 @chat.command("create")
 @click.argument("prompt")
 @click.option("--model", "-m", default="gemini-1.5-flash", help="The model name to use.")
 @click.option("--folder-id", help="Optional ID of the folder to add this chat to.")
+@click.option(
+    "--kb-id", "kb_ids",
+    multiple=True,
+    help="ID of a knowledge base to use for RAG. Can be specified multiple times."
+)
+@click.option("--k", type=int, help="Number of top hits to retrieve from the KB.")
+@click.option("--k-reranker", type=int, help="Number of re-ranked hits from the KB.")
+@click.option("--r", type=float, help="Relevance score threshold for KB retrieval (0.0 to 1.0).")
+@click.option("--hybrid/--no-hybrid", default=None, type=bool, help="Enable/disable hybrid search for KB retrieval.")
+@click.option("--hybrid-bm25-weight", type=float, help="Weight for BM25 in hybrid search (0.0 to 1.0).")
 @click.pass_context
-def create_chat_command_wrapper(ctx, prompt: str, model: str, folder_id: Optional[str]):
-    """Creates a new chat, gets a response, and saves it to Open WebUI."""
-    asyncio.run(_create_chat_async(ctx, prompt, model, folder_id))
+def create_chat_command_wrapper(
+    ctx,
+    prompt: str,
+    model: str,
+    folder_id: Optional[str],
+    kb_ids: tuple[str],
+    k: Optional[int],
+    k_reranker: Optional[int],
+    r: Optional[float],
+    hybrid: Optional[bool],
+    hybrid_bm25_weight: Optional[float],
+):
+    """Creates a new chat, optionally using one or more knowledge bases with RAG."""
+    kb_id_list = list(kb_ids) if kb_ids else None
+    asyncio.run(
+        _create_chat_async(
+            ctx,
+            prompt,
+            model,
+            folder_id,
+            kb_id_list,
+            k,
+            k_reranker,
+            r,
+            hybrid,
+            hybrid_bm25_weight,
+        )
+    )
 
-
-async def _create_chat_async(ctx, prompt: str, model: str, folder_id: Optional[str]):
+# _create_chat_async function (update signature to receive new RAG settings)
+async def _create_chat_async(
+    ctx,
+    prompt: str,
+    model: str,
+    folder_id: Optional[str],
+    kb_ids: Optional[List[str]],
+    k: Optional[int],
+    k_reranker: Optional[int],
+    r: Optional[float],
+    hybrid: Optional[bool],
+    hybrid_bm25_weight: Optional[float],
+):
     log.info(f"CLI: Attempting to create chat with prompt: '{prompt[:50]}...'")
+    if kb_ids:
+        log.info(f"CLI: Using knowledge bases: {kb_ids}")
+
     try:
         sdk = OpenWebUI()
-        result_chat = await sdk.chats.create(model=model, prompt=prompt, folder_id=folder_id)
+        result_chat = await sdk.chats.create(
+            model=model,
+            prompt=prompt,
+            folder_id=folder_id,
+            kb_ids=kb_ids,
+            k=k,
+            k_reranker=k_reranker,
+            r=r,
+            hybrid=hybrid,
+            hybrid_bm25_weight=hybrid_bm25_weight,
+        )
 
         if ctx.obj["OUTPUT_FORMAT"] == "json":
             format_output(result_chat, ctx.obj["OUTPUT_FORMAT"])
@@ -120,13 +178,11 @@ async def _create_chat_async(ctx, prompt: str, model: str, folder_id: Optional[s
             click.secho(
                 f"✅ Success! New chat created with ID: {result_chat.id}", fg="bright_green", bold=True
             )
-            # Access nested attributes defensively based on common generated client patterns
             last_message_content = ""
-            if hasattr(result_chat, "chat") and hasattr(result_chat.chat, "additional_properties"):
+            if hasattr(result_chat, 'chat') and hasattr(result_chat.chat, 'additional_properties'):
                 messages = result_chat.chat.additional_properties.get("messages", [])
                 if messages:
                     last_message_content = messages[-1].get("content", "")
-
             click.secho("Assistant Response:", fg="cyan", bold=True)
             click.echo(last_message_content)
         log.info("CLI: Chat creation command completed successfully.")
@@ -139,27 +195,83 @@ async def _create_chat_async(ctx, prompt: str, model: str, folder_id: Optional[s
         raise click.Abort()
 
 
+# continue_chat_command_wrapper function (add new options for RAG settings)
 @chat.command("continue")
 @click.argument("chat_id")
 @click.argument("prompt")
+@click.option(
+    "--kb-id", "kb_ids",
+    multiple=True,
+    help="ID of a knowledge base to use for RAG. Can be specified multiple times."
+)
+@click.option("--k", type=int, help="Number of top hits to retrieve from the KB.")
+@click.option("--k-reranker", type=int, help="Number of re-ranked hits from the KB.")
+@click.option("--r", type=float, help="Relevance score threshold for KB retrieval (0.0 to 1.0).")
+@click.option("--hybrid/--no-hybrid", default=None, type=bool, help="Enable/disable hybrid search for KB retrieval.")
+@click.option("--hybrid-bm25-weight", type=float, help="Weight for BM25 in hybrid search (0.0 to 1.0).")
 @click.pass_context
-def continue_chat_command_wrapper(ctx, chat_id: str, prompt: str):
-    """Continues an existing chat thread by its ID."""
-    asyncio.run(_continue_chat_async(ctx, chat_id, prompt))
+def continue_chat_command_wrapper(
+    ctx,
+    chat_id: str,
+    prompt: str,
+    kb_ids: tuple[str],
+    k: Optional[int],
+    k_reranker: Optional[int],
+    r: Optional[float],
+    hybrid: Optional[bool],
+    hybrid_bm25_weight: Optional[float],
+):
+    """Continues an existing chat thread by its ID, optionally using RAG."""
+    kb_id_list = list(kb_ids) if kb_ids else None
+    asyncio.run(
+        _continue_chat_async(
+            ctx,
+            chat_id,
+            prompt,
+            kb_id_list,
+            k,
+            k_reranker,
+            r,
+            hybrid,
+            hybrid_bm25_weight,
+        )
+    )
 
+# _continue_chat_async function (update signature to receive new RAG settings)
+async def _continue_chat_async(
+    ctx,
+    chat_id: str,
+    prompt: str,
+    kb_ids: Optional[List[str]],
+    k: Optional[int],
+    k_reranker: Optional[int],
+    r: Optional[float],
+    hybrid: Optional[bool],
+    hybrid_bm25_weight: Optional[float],
+):
+    log.info(f"CLI: Attempting to continue chat '{chat_id}' with prompt: '{prompt}...'")
+    if kb_ids:
+        log.info(f"CLI: Using knowledge bases: {kb_ids}")
 
-async def _continue_chat_async(ctx, chat_id: str, prompt: str):
-    log.info(f"CLI: Attempting to continue chat '{chat_id}' with prompt: '{prompt[:50]}...'")
     try:
         sdk = OpenWebUI()
-        updated_chat = await sdk.chats.continue_chat(chat_id=chat_id, prompt=prompt)
+        updated_chat = await sdk.chats.continue_chat(
+            chat_id=chat_id,
+            prompt=prompt,
+            kb_ids=kb_ids,
+            k=k,
+            k_reranker=k_reranker,
+            r=r,
+            hybrid=hybrid,
+            hybrid_bm25_weight=hybrid_bm25_weight,
+        )
 
         if ctx.obj["OUTPUT_FORMAT"] == "json":
             format_output(updated_chat, ctx.obj["OUTPUT_FORMAT"])
         else:
             click.secho(f"✅ Success! Chat {updated_chat.id} updated.", fg="bright_green", bold=True)
             last_message_content = ""
-            if hasattr(updated_chat, "chat") and hasattr(updated_chat.chat, "additional_properties"):
+            if hasattr(updated_chat, 'chat') and hasattr(updated_chat.chat, 'additional_properties'):
                 messages = updated_chat.chat.additional_properties.get("messages", [])
                 if messages:
                     last_message_content = messages[-1].get("content", "")
@@ -173,7 +285,6 @@ async def _continue_chat_async(ctx, chat_id: str, prompt: str):
             click.secho(f"Response: {e.response.text}", fg="red", err=True)
         log.error("CLI: Chat continuation command failed.")
         raise click.Abort()
-
 
 @chat.command("list")
 @click.argument("chat_id")  # This lists messages OF a specific chat

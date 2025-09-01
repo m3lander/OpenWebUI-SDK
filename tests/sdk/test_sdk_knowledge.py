@@ -1,8 +1,9 @@
+import httpx
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 from openwebui.exceptions import APIError
 from openwebui.open_web_ui_client.open_web_ui_client import models  # Import generated models
-from openwebui.open_web_ui_client.open_web_ui_client.types import Response
+from openwebui.open_web_ui_client.open_web_ui_client.types import Response, UNSET
 import json  # Import json for json.dumps here
 from pathlib import Path  # Import Path from pathlib here
 
@@ -343,3 +344,152 @@ async def test_knowledge_list_files_success(mocker, sdk_client):
     assert files[0].id == "file1"
     assert files[1].meta["name"] == "report.docx"  # FIX: Access meta as a dict directly
     mock_list_files_api_call.assert_awaited_once_with(id="test-kb-id", client=sdk_client._client)
+
+
+@pytest.mark.asyncio
+async def test_knowledge_query_success_basic(mocker, sdk_client):
+    """Test successful basic query to a single knowledge base."""
+    mock_query_api_call = mocker.patch(
+        "openwebui.api.knowledge.query_kb_api_call", new_callable=AsyncMock
+    )
+
+    # Simulate a successful retrieval response with content
+    mock_retrieved_chunks = [
+        {"content": "This is a test document snippet.", "meta": {"file": "test.txt"}},
+        {"content": "Another relevant piece of information.", "meta": {"file": "another.pdf"}},
+    ]
+    mock_response_object = MagicMock(spec=Response, status_code=200, parsed=mock_retrieved_chunks)
+    mock_query_api_call.return_value = mock_response_object
+
+    query_text = "What is the main topic?"
+    kb_ids = ["kb-id-1"]
+    k_value = 2
+
+    result_chunks = await sdk_client.knowledge.query(query_text, kb_ids, k=k_value)
+
+    # Assert that the low-level API was called with the correct QueryCollectionsForm
+    mock_query_api_call.assert_awaited_once()
+    call_args, call_kwargs = mock_query_api_call.call_args
+    assert isinstance(call_kwargs['body'], models.QueryCollectionsForm)
+    assert call_kwargs['body'].collection_names == kb_ids
+    assert call_kwargs['body'].query == query_text
+    assert call_kwargs['body'].k == k_value
+    assert call_kwargs['body'].k_reranker is UNSET
+    assert call_kwargs['body'].r is UNSET
+    assert call_kwargs['body'].hybrid is UNSET
+    assert call_kwargs['body'].hybrid_bm25_weight is UNSET
+
+    # Assert the returned data matches the mock response
+    assert isinstance(result_chunks, list)
+    assert len(result_chunks) == len(mock_retrieved_chunks)
+    assert result_chunks[0]["content"] == "This is a test document snippet."
+    assert result_chunks[1]["meta"]["file"] == "another.pdf"
+
+
+@pytest.mark.asyncio
+async def test_knowledge_query_success_multiple_kbs_and_all_rag_params(mocker, sdk_client):
+    """Test successful query to multiple knowledge bases with all RAG parameters."""
+    mock_query_api_call = mocker.patch(
+        "openwebui.api.knowledge.query_kb_api_call", new_callable=AsyncMock
+    )
+
+    mock_retrieved_chunks = [
+        {"content": "Content from KB A.", "meta": {"kb": "KB_A"}},
+        {"content": "Content from KB B.", "meta": {"kb": "KB_B"}},
+    ]
+    mock_response_object = MagicMock(spec=Response, status_code=200, parsed=mock_retrieved_chunks)
+    mock_query_api_call.return_value = mock_response_object
+
+    query_text = "Advanced RAG search"
+    kb_ids = ["kb-alpha", "kb-beta"]
+    k_value = 5
+    k_reranker_value = 3
+    r_value = 0.75
+    hybrid_value = True
+    hybrid_bm25_weight_value = 0.3
+
+    result_chunks = await sdk_client.knowledge.query(
+        query_text,
+        kb_ids,
+        k=k_value,
+        k_reranker=k_reranker_value,
+        r=r_value,
+        hybrid=hybrid_value,
+        hybrid_bm25_weight=hybrid_bm25_weight_value
+    )
+
+    # Assert the low-level API was called with the correct QueryCollectionsForm
+    mock_query_api_call.assert_awaited_once()
+    call_args, call_kwargs = mock_query_api_call.call_args
+    assert isinstance(call_kwargs['body'], models.QueryCollectionsForm)
+    assert call_kwargs['body'].collection_names == kb_ids
+    assert call_kwargs['body'].query == query_text
+    assert call_kwargs['body'].k == k_value
+    assert call_kwargs['body'].k_reranker == k_reranker_value
+    assert call_kwargs['body'].r == r_value
+    assert call_kwargs['body'].hybrid == hybrid_value
+    assert call_kwargs['body'].hybrid_bm25_weight == hybrid_bm25_weight_value
+
+    assert isinstance(result_chunks, list)
+    assert len(result_chunks) == len(mock_retrieved_chunks)
+
+
+@pytest.mark.asyncio
+async def test_knowledge_query_empty_result(mocker, sdk_client):
+    """Test query returning an empty list of chunks."""
+    mock_query_api_call = mocker.patch(
+        "openwebui.api.knowledge.query_kb_api_call", new_callable=AsyncMock
+    )
+    # Simulate an empty retrieval result
+    mock_response_object = MagicMock(spec=Response, status_code=200, parsed=[])
+    mock_query_api_call.return_value = mock_response_object
+
+    query_text = "Non-existent topic"
+    kb_ids = ["empty-kb"]
+
+    result_chunks = await sdk_client.knowledge.query(query_text, kb_ids)
+
+    mock_query_api_call.assert_awaited_once()
+    assert result_chunks == []
+
+
+@pytest.mark.asyncio
+async def test_knowledge_query_api_error(mocker, sdk_client):
+    """Test APIError during knowledge base query."""
+    mock_query_api_call = mocker.patch(
+        "openwebui.api.knowledge.query_kb_api_call", new_callable=AsyncMock
+    )
+
+    # Simulate an API error response (e.g., 400 Bad Request)
+    mock_bad_response = MagicMock(spec=Response, status_code=400, content=b'{"detail": "Invalid query"}')
+    mock_bad_response.parsed = None  # Ensure handle_api_response goes to raw content
+    mock_query_api_call.return_value = mock_bad_response
+
+    query_text = "Error query"
+    kb_ids = ["invalid-kb"]
+
+    with pytest.raises(APIError) as exc_info:
+        await sdk_client.knowledge.query(query_text, kb_ids)
+
+    assert exc_info.value.status_code == 400
+    assert "Invalid query" in str(exc_info.value)
+    mock_query_api_call.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_knowledge_query_connection_error(mocker, sdk_client):
+    """Test ConnectionError during knowledge base API call."""
+    mock_query_api_call = mocker.patch(
+        "openwebui.api.knowledge.query_kb_api_call", new_callable=AsyncMock
+    )
+    # Simulate a network connection error
+    mock_query_api_call.side_effect = httpx.ConnectError("Connection refused")
+
+    query_text = "Network issue"
+    kb_ids = ["remote-kb"]
+
+    with pytest.raises(ConnectionError) as exc_info:
+        await sdk_client.knowledge.query(query_text, kb_ids)
+
+    assert "Connection refused" in str(exc_info.value)
+    mock_query_api_call.assert_awaited_once()
