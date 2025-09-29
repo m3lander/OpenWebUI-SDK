@@ -1,11 +1,11 @@
 import logging
-from typing import List, Optional, Any
+from typing import List, Optional
 
 import httpx
 
 # Import the new KnowledgeBaseAPI to perform RAG queries
 from .knowledge import KnowledgeBaseAPI
-from ..exceptions import APIError, AuthenticationError, ConnectionError, NotFoundError
+from ..exceptions import ConnectionError
 from ..utils.api_utils import handle_api_response
 
 # Import the generated client, models, and specific api functions
