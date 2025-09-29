@@ -1,0 +1,15 @@
+# OpenWebUI-SDK Configuration Example
+# Copy this to ~/.owui/config.yaml or .owui/config.yaml and customize
+
+server:
+  url: "http://localhost:8080"     # Your OpenWebUI instance URL
+  api_key: "sk-YOUR_API_KEY_HERE"  # Your API key from OpenWebUI settings
+
+# Alternative: Use environment variables (highest precedence)
+# export OPENWEBUI_URL="http://your-openwebui-instance:8080"
+# export OPENWEBUI_API_KEY="sk-YOUR_API_KEY_HERE"
+
+# Configuration hierarchy (highest to lowest precedence):
+# 1. Environment variables (OPENWEBUI_URL, OPENWEBUI_API_KEY)
+# 2. Local project config (./.owui/config.yaml)
+# 3. User-level config (~/.owui/config.yaml)
